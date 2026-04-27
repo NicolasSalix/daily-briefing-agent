@@ -162,12 +162,27 @@ async function generateBriefing(tasks, events) {
     `Today is ${today} (São Paulo time).\n\n` +
     `TASKS:\n${buildTasksText(tasks)}\n\n` +
     `CALENDAR:\n${buildEventsText(events)}\n\n` +
-    `Generate the daily briefing in EXACTLY this format:\n\n` +
-    `🎯 TOP PRIORITY\n[1-2 sentences: most urgent task with deadline]\n\n` +
-    `⏳ WAITING ON\n[1-2 sentences: what's blocked, who you're waiting for]\n\n` +
-    `🔴 AT RISK\n[1-2 sentences: anything that might slip or is overdue]\n\n` +
-    `✅ QUICK WINS\n[1-2 sentences: easy tasks to knock out today]\n\n` +
-    `⏰ TIME BLOCKS\n[2-3 sentences: how to structure the day based on calendar]`;
+    `Generate the daily briefing using bullet points in this exact section structure:\n\n` +
+    `📌 TODAY'S FOCUS (1-2 bullets max)\n` +
+    `- [Most urgent task with deadline] — [key detail/blocker]\n` +
+    `- [Secondary priority] — [what you need to do]\n\n` +
+    `⏳ WAITING ON (blocked tasks)\n` +
+    `- [Task] — waiting on [person/thing], expected [date if known]\n\n` +
+    `🔴 AT RISK (might slip)\n` +
+    `- [Task] — due [date], [reason it's at risk]\n\n` +
+    `✅ QUICK WINS (can finish today)\n` +
+    `- [Task] — [estimated time, e.g., 30 min]\n\n` +
+    `📅 YOUR DAY (calendar + task matching)\n` +
+    `- [Time] [Event] → focus on [related task if any]\n` +
+    `- Free time: [X minutes] — use for [suggested task]\n\n` +
+    `Rules:\n` +
+    `- Use ACTUAL task names from the Notion list above, not generic descriptions.\n` +
+    `- Include due dates for high-priority items when present.\n` +
+    `- Keep each bullet to ONE line max.\n` +
+    `- Only show tasks/events relevant for TODAY.\n` +
+    `- If a section has nothing, OMIT that section entirely (don't print an empty header).\n` +
+    `- If the calendar is empty, replace 📅 YOUR DAY content with: "No scheduled events, full day for focused work."\n` +
+    `- Do not add commentary, intro, outro, or markdown bold — just the sections and bullets above.`;
 
   try {
     const response = await anthropic.messages.create({
@@ -176,7 +191,7 @@ async function generateBriefing(tasks, events) {
       system: [
         {
           type: 'text',
-          text: "You are Nico's daily briefing assistant. Analyze his tasks and calendar to create an intelligent, prioritized daily plan. Focus on what matters most and what's at risk. Be concise and actionable.",
+          text: "You are Nico's daily briefing assistant. Produce a concise, bullet-pointed daily plan from his tasks and calendar. Be actionable and reference real task names. Match calendar events to related tasks when possible. Omit empty sections rather than showing placeholders.",
           cache_control: { type: 'ephemeral' },
         },
       ],
