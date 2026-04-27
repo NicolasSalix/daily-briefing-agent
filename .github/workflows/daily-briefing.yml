@@ -1,0 +1,34 @@
+name: Daily Briefing
+
+on:
+  schedule:
+    - cron: '0 11 * * *'   # 11:00 UTC = 8:00 AM São Paulo (UTC-3)
+  workflow_dispatch:         # Manual trigger from GitHub Actions tab
+
+jobs:
+  send-briefing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Daily Briefing Agent
+        run: node daily_briefing_agent.js
+        env:
+          ANTHROPIC_API_KEY:    ${{ secrets.ANTHROPIC_API_KEY }}
+          NOTION_API_KEY:       ${{ secrets.NOTION_API_KEY }}
+          CALENDAR_TOKEN:       ${{ secrets.CALENDAR_TOKEN }}
+          GOOGLE_CLIENT_ID:     ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GMAIL_APP_PASSWORD:   ${{ secrets.GMAIL_APP_PASSWORD }}
