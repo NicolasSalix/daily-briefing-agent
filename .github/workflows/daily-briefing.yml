@@ -5,28 +5,25 @@ on:
     - cron: '0 11 * * *'   # 11:00 UTC = 8:00 AM São Paulo (UTC-3)
   workflow_dispatch:         # Manual trigger from GitHub Actions tab
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   send-briefing:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate lock file
-        run: npm install --package-lock-only --ignore-scripts
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Run Daily Briefing Agent
         run: node daily_briefing_agent.js
