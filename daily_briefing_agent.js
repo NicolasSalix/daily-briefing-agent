@@ -13,45 +13,72 @@ const EMAIL_FROM = 'ngspielmann@gmail.com';
 
 // ─── Notion ───────────────────────────────────────────────────────────────────
 
+let notionLastError = null;
+
 async function fetchNotionTasks() {
-  const notion = new NotionClient({ auth: process.env.NOTION_API_KEY });
-
-  try {
-    const response = await notion.databases.query({
-      database_id: NOTION_DB,
-      filter: {
-        or: [
-          { property: 'Status', status: { equals: 'To-Do' } },
-          { property: 'Status', status: { equals: 'Urgent' } },
-        ],
-      },
-      sorts: [{ property: 'Status', direction: 'descending' }],
-    });
-
-    return response.results.map(page => {
-      const p = page.properties;
-      const name =
-        p.Name?.title?.[0]?.plain_text ||
-        p.Task?.title?.[0]?.plain_text ||
-        p.Title?.title?.[0]?.plain_text ||
-        'Untitled';
-      const status = p.Status?.status?.name || 'Unknown';
-      const dueDate = p['Due Date']?.date?.start || p.Due?.date?.start || null;
-      const priority =
-        p.Priority?.select?.name ||
-        p.Priority?.multi_select?.[0]?.name ||
-        null;
-      return { name, status, dueDate, priority };
-    });
-  } catch (err) {
-    console.error('  ❌ Notion error:', err.message);
+  if (!process.env.NOTION_API_KEY) {
+    notionLastError = 'NOTION_API_KEY env var is not set';
+    console.error('  ❌ Notion error:', notionLastError);
     return null;
   }
+
+  const notion = new NotionClient({ auth: process.env.NOTION_API_KEY });
+
+  // Try unfiltered first — most reliable, then filter client-side.
+  // Avoids guessing wrong property type (status vs select) on the server.
+  let response;
+  try {
+    response = await notion.databases.query({
+      database_id: NOTION_DB,
+      page_size: 100,
+    });
+  } catch (err) {
+    notionLastError = `${err.code || 'error'}: ${err.message}`;
+    console.error('  ❌ Notion error:', notionLastError);
+    if (err.body) console.error('     body:', err.body);
+    return null;
+  }
+
+  const allTasks = response.results.map(page => {
+    const p = page.properties;
+    const name =
+      p.Name?.title?.[0]?.plain_text ||
+      p.Task?.title?.[0]?.plain_text ||
+      p.Title?.title?.[0]?.plain_text ||
+      'Untitled';
+    const status =
+      p.Status?.status?.name ||
+      p.Status?.select?.name ||
+      'Unknown';
+    const dueDate = p['Due Date']?.date?.start || p.Due?.date?.start || null;
+    const priority =
+      p.Priority?.select?.name ||
+      p.Priority?.status?.name ||
+      p.Priority?.multi_select?.[0]?.name ||
+      null;
+    return { name, status, dueDate, priority };
+  });
+
+  // Filter client-side: To-Do or Urgent (case-insensitive, tolerates "Todo", "To Do")
+  const wantedStatuses = ['to-do', 'todo', 'to do', 'urgent'];
+  return allTasks.filter(t => wantedStatuses.includes((t.status || '').toLowerCase()));
 }
 
 // ─── Google Calendar ──────────────────────────────────────────────────────────
 
+let calendarLastError = null;
+
 async function fetchCalendarEvents() {
+  const missing = [];
+  if (!process.env.GOOGLE_CLIENT_ID) missing.push('GOOGLE_CLIENT_ID');
+  if (!process.env.GOOGLE_CLIENT_SECRET) missing.push('GOOGLE_CLIENT_SECRET');
+  if (!process.env.CALENDAR_TOKEN) missing.push('CALENDAR_TOKEN');
+  if (missing.length) {
+    calendarLastError = `Missing env vars: ${missing.join(', ')}`;
+    console.error('  ❌ Calendar error:', calendarLastError);
+    return null;
+  }
+
   try {
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
@@ -97,7 +124,9 @@ async function fetchCalendarEvents() {
       return { title: event.summary || 'Untitled', allDay: false, start: fmt(startDate), end: fmt(endDate), duration };
     });
   } catch (err) {
-    console.error('  ❌ Calendar error:', err.message);
+    const detail = err.response?.data?.error_description || err.response?.data?.error || err.message;
+    calendarLastError = `${err.code || 'error'}: ${detail}`;
+    console.error('  ❌ Calendar error:', calendarLastError);
     return null;
   }
 }
@@ -105,7 +134,7 @@ async function fetchCalendarEvents() {
 // ─── Claude ───────────────────────────────────────────────────────────────────
 
 function buildTasksText(tasks) {
-  if (tasks === null) return 'No tasks loaded (Notion connection failed).';
+  if (tasks === null) return `No tasks loaded (Notion error: ${notionLastError || 'unknown'}).`;
   if (tasks.length === 0) return 'No To-Do or Urgent tasks found.';
   return tasks.map(t =>
     `- ${t.name} | Status: ${t.status}` +
@@ -115,7 +144,7 @@ function buildTasksText(tasks) {
 }
 
 function buildEventsText(events) {
-  if (events === null) return 'No calendar data loaded (Calendar connection failed).';
+  if (events === null) return `No calendar data loaded (Calendar error: ${calendarLastError || 'unknown'}).`;
   if (events.length === 0) return 'No events today.';
   return events.map(e =>
     e.allDay ? `- ${e.title} (all day)` : `- ${e.title} | ${e.start} – ${e.end} (${e.duration})`,
