@@ -5,9 +5,6 @@ on:
     - cron: '0 11 * * *'   # 11:00 UTC = 8:00 AM São Paulo (UTC-3)
   workflow_dispatch:         # Manual trigger from GitHub Actions tab
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   send-briefing:
     runs-on: ubuntu-latest
@@ -17,10 +14,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
+      - name: Install Node.js 24
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+          node --version
+          npm --version
 
       - name: Install dependencies
         run: npm install
